@@ -38,16 +38,16 @@ if ! command -v dtach &>/dev/null; then
   echo "  [!] dtach not found. Installing..."
   if [[ "$OSTYPE" == darwin* ]]; then
     if command -v brew &>/dev/null; then
-      brew install dtach
+      brew install dtach </dev/null
     else
       echo "      Please install Homebrew first: https://brew.sh"
       echo "      Then run: brew install dtach"
       exit 1
     fi
   elif command -v apt-get &>/dev/null; then
-    sudo apt-get install -y dtach
+    sudo apt-get install -y dtach </dev/null
   elif command -v yum &>/dev/null; then
-    sudo yum install -y dtach
+    sudo yum install -y dtach </dev/null
   else
     echo "      Please install dtach manually"
     exit 1
@@ -85,7 +85,7 @@ else
     cd "$INSTALL_DIR"
   elif command -v git &>/dev/null; then
     echo "  Cloning from GitHub..."
-    git clone https://github.com/ProblemFactory/claude-code-webui.git "$INSTALL_DIR"
+    git clone https://github.com/ProblemFactory/claude-code-webui.git "$INSTALL_DIR" </dev/null
     cd "$INSTALL_DIR"
   else
     echo "  [!] git not found. Install git or download manually:"
@@ -95,7 +95,7 @@ else
 fi
 
 echo "  Installing dependencies..."
-npm install --no-fund --no-audit 2>&1 | tail -1
+npm install --no-fund --no-audit </dev/null 2>&1 | tail -1
 
 echo "  Building frontend..."
 npm run build 2>&1 | tail -1
