@@ -71,6 +71,7 @@ if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/server.js" ]; then
   echo "  Existing installation found at $INSTALL_DIR"
   echo "  Updating..."
   cd "$INSTALL_DIR"
+  if [ -d ".git" ]; then git pull --ff-only 2>/dev/null || true; fi
 else
   echo ""
   echo "  Installing to $INSTALL_DIR ..."
@@ -82,9 +83,13 @@ else
       cp -r . "$INSTALL_DIR/"
     fi
     cd "$INSTALL_DIR"
+  elif command -v git &>/dev/null; then
+    echo "  Cloning from GitHub..."
+    git clone https://github.com/ProblemFactory/claude-code-webui.git "$INSTALL_DIR"
+    cd "$INSTALL_DIR"
   else
-    echo "  [!] Please run this script from the project directory"
-    echo "      or set CLAUDE_WEBUI_DIR to the project path"
+    echo "  [!] git not found. Install git or download manually:"
+    echo "      https://github.com/ProblemFactory/claude-code-webui"
     exit 1
   fi
 fi
