@@ -1,0 +1,8 @@
+node_modules/
+public/bundle.js
+data/sockets/
+data/session-meta/
+data/session-buffers/
+data/layouts.json
+data/bin/code
+*.nfs*

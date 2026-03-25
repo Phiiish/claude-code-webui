@@ -1,0 +1,208 @@
+class LayoutManager {
+  constructor(app) {
+    this.app = app;
+    this._autoSaveTimer = null;
+    this._savedLayouts = {};
+    this._currentName = null;
+  }
+
+  // Capture current workspace state
+  captureState() {
+    const windows = [];
+    for (const [id, win] of this.app.wm.windows) {
+      const el = win.element;
+      const termSession = this.app.sessions.get(id);
+      const winState = {
+        title: win.title, type: win.type,
+        left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height,
+        isMinimized: win.isMinimized, isMaximized: win.isMaximized,
+        gridBounds: win.gridBounds || undefined,
+      };
+      // For terminals, save both webui session id and claude session id
+      if (win.type === 'terminal' && termSession) {
+        winState.serverSessionId = termSession.sessionId;
+        const allSess = this.app.sidebar?._allSessions || [];
+        const match = allSess.find(s => s.webuiId === termSession.sessionId);
+        if (match) winState.claudeSessionId = match.sessionId;
+        // Save per-terminal overrides
+        if (termSession.overrides) winState.terminalOverrides = termSession.overrides;
+        // Save editor split-pane state (Ctrl+G)
+        if (win._editorState) winState.editorState = win._editorState;
+      }
+      // For file explorers, save current path
+      if (win.type === 'files' && win._explorerPath) {
+        winState.explorerPath = win._explorerPath;
+      }
+      windows.push(winState);
+    }
+    const grid = this.app.wm.grid;
+    const theme = this.app.themeManager.current;
+    const sidebarOpen = this.app.sidebar.isOpen;
+    return { windows, grid, theme, sidebarOpen };
+  }
+
+  // Restore workspace from state
+  async restoreState(state) {
+    if (!state || !state.windows) return;
+
+    // Restore theme
+    if (state.theme) {
+      this.app.themeManager.apply(state.theme);
+    }
+
+    // Restore grid
+    if (state.grid) {
+      this.app.wm.setGrid(state.grid.rows, state.grid.cols);
+    }
+
+    // Restore sidebar
+    if (state.sidebarOpen !== undefined) {
+      this.app.sidebar.toggle(state.sidebarOpen);
+    }
+
+    // Wait for active sessions list from server
+    let activeSessions = [];
+    try {
+      const res = await fetch('/api/active');
+      const data = await res.json();
+      activeSessions = data.sessions || [];
+    } catch {}
+
+    // Restore windows — use gridBounds if available, otherwise absolute position
+    const applyPosition = (winInfo, winState) => {
+      if (!winInfo) return;
+      if (winState.gridBounds) {
+        winInfo.gridBounds = winState.gridBounds;
+        this.app.wm._applyGridBounds(winInfo);
+      } else {
+        const el = winInfo.element;
+        el.style.left = winState.left; el.style.top = winState.top;
+        el.style.width = winState.width; el.style.height = winState.height;
+      }
+      if (winState.isMinimized) this.app.wm.minimize(winInfo.id);
+      setTimeout(() => { if (winInfo.onResize) winInfo.onResize(); }, 200);
+    };
+
+    for (const ws of state.windows) {
+      if (ws.type === 'terminal') {
+        let alive = null;
+        if (ws.claudeSessionId) {
+          alive = activeSessions.find(s => s.claudeSessionId === ws.claudeSessionId);
+        }
+        if (!alive && ws.serverSessionId) {
+          alive = activeSessions.find(s => s.id === ws.serverSessionId);
+        }
+        if (alive) {
+          const winInfo = this.app.attachSession(alive.id, alive.name, alive.cwd);
+          applyPosition(winInfo, ws);
+          // Restore split-pane editor if it was active (Ctrl+G)
+          if (ws.editorState && winInfo) {
+            setTimeout(() => {
+              this.app.wm.focusWindow(winInfo.id);
+              this.app._openExternalEditor(ws.editorState.filePath, ws.editorState.signalPath);
+            }, 500);
+          }
+        }
+      } else if (ws.type === 'files') {
+        this.app.openFileExplorer(ws.explorerPath);
+        const winInfo = [...this.app.wm.windows.values()].pop();
+        applyPosition(winInfo, ws);
+      }
+    }
+  }
+
+  // Auto-save (debounced, triggered on every window change)
+  // Won't fire until initial restore is complete
+  scheduleAutoSave() {
+    if (this._restoring) return; // Don't autosave while restoring
+    if (this._autoSaveTimer) clearTimeout(this._autoSaveTimer);
+    this._autoSaveTimer = setTimeout(() => this._doAutoSave(), 2000);
+  }
+
+  async _doAutoSave() {
+    const state = this.captureState();
+    try {
+      await fetch('/api/layouts-autosave', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state),
+      });
+    } catch {}
+  }
+
+  // Load auto-saved state on startup
+  async loadAutoSave() {
+    this._restoring = true;
+    try {
+      const res = await fetch('/api/layouts');
+      const data = await res.json();
+      this._savedLayouts = data.saved || {};
+      this._currentName = data.current || null;
+
+      const toRestore = data.autoSave;
+
+      if (toRestore && toRestore.windows && toRestore.windows.length > 0) {
+        await this.restoreState(toRestore);
+      }
+    } catch {}
+    // Allow autosave after restore is complete (with extra delay for windows to attach)
+    setTimeout(() => { this._restoring = false; }, 5000);
+  }
+
+  // Save a named layout
+  async saveNamed(name) {
+    const state = this.captureState();
+    try {
+      await fetch(`/api/layouts/${encodeURIComponent(name)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state),
+      });
+      await fetch('/api/layouts-active', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      this._savedLayouts[name] = state;
+      this._currentName = name;
+    } catch {}
+  }
+
+  // Load a named layout
+  async loadNamed(name) {
+    const layout = this._savedLayouts[name];
+    if (!layout) return;
+    // Detach windows without killing sessions — just remove UI elements
+    for (const [id, win] of [...this.app.wm.windows]) {
+      const term = this.app.sessions.get(id);
+      if (term) { term.dispose(); this.app.sessions.delete(id); }
+      win.element.remove();
+      this.app.wm.windows.delete(id);
+    }
+    this.app.wm._notify();
+    await fetch('/api/layouts-active', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    this._currentName = name;
+    await this.restoreState(layout);
+  }
+
+  // Delete a named layout
+  async deleteNamed(name) {
+    try {
+      await fetch(`/api/layouts/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      delete this._savedLayouts[name];
+      if (this._currentName === name) this._currentName = null;
+    } catch {}
+  }
+
+  // Refresh saved list from server
+  async refresh() {
+    try {
+      const res = await fetch('/api/layouts');
+      const data = await res.json();
+      this._savedLayouts = data.saved || {};
+      this._currentName = data.current || null;
+    } catch {}
+  }
+}
+
+export { LayoutManager };

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Code WebUI</title>
+  <link rel="stylesheet" href="/xterm.css">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=JetBrains+Mono:wght@400;500&family=Source+Code+Pro:wght@400;500&family=IBM+Plex+Mono:wght@400;500&family=Inconsolata:wght@400;500&display=swap">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">Sessions</span>
+      <button id="sidebar-close" class="icon-btn" title="Close sidebar">✕</button>
+    </div>
+    <div class="sidebar-section" style="flex:1;overflow-y:auto;display:flex;flex-direction:column">
+      <div style="display:flex;gap:4px;padding:4px 6px;align-items:center">
+        <input type="text" id="session-filter" class="filter-input" style="margin:0;flex:1" placeholder="Filter...">
+        <button id="live-filter" class="icon-btn" title="Show live only" style="font-size:11px;width:auto;padding:0 6px">●</button>
+        <button id="sort-toggle" class="icon-btn" title="Sort by: Recent" style="font-size:11px;width:auto;padding:0 6px">⏱</button>
+      </div>
+      <div id="all-sessions-list" class="session-items" style="flex:1;overflow-y:auto">
+        <div class="empty-hint">Loading...</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Layout -->
+  <div id="main-wrapper">
+    <!-- Top Toolbar -->
+    <header id="toolbar">
+      <div class="toolbar-left">
+        <button id="sidebar-toggle" class="icon-btn" title="Toggle sidebar">☰</button>
+        <span class="toolbar-title">Claude Code WebUI</span>
+      </div>
+      <div class="toolbar-center">
+        <div class="layout-presets" id="layout-presets">
+          <button class="layout-btn" data-layout="freeform" title="Freeform (no grid)">
+            <svg viewBox="0 0 16 16" width="14" height="14"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke="currentColor" stroke-width="1" transform="rotate(-5 3.5 3)"/><rect x="7" y="3" width="7" height="5" rx="0.5" fill="none" stroke="currentColor" stroke-width="1" transform="rotate(3 10.5 5.5)"/><rect x="2" y="8" width="6" height="6" rx="0.5" fill="none" stroke="currentColor" stroke-width="1" transform="rotate(2 5 11)"/></svg>
+          </button>
+          <button class="layout-btn" data-layout="maximize" title="Maximize">
+            <svg viewBox="0 0 16 16" width="14" height="14"><rect x="2" y="2" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          </button>
+          <button class="layout-btn" data-layout="two-vertical" title="Split vertical">
+            <svg viewBox="0 0 16 16" width="14" height="14"><rect x="1" y="2" width="6" height="12" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="2" width="6" height="12" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+          </button>
+          <button class="layout-btn" data-layout="two-horizontal" title="Split horizontal">
+            <svg viewBox="0 0 16 16" width="14" height="14"><rect x="2" y="1" width="12" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="9" width="12" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+          </button>
+          <button class="layout-btn" data-layout="quad" title="Quad">
+            <svg viewBox="0 0 16 16" width="14" height="14"><rect x="1" y="1" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="1" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="1" y="9" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="9" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+          </button>
+          <button class="layout-btn" data-layout="three-columns" title="3 columns">
+            <svg viewBox="0 0 16 16" width="14" height="14"><rect x="0.5" y="2" width="4.3" height="12" fill="none" stroke="currentColor" stroke-width="1"/><rect x="5.8" y="2" width="4.3" height="12" fill="none" stroke="currentColor" stroke-width="1"/><rect x="11.2" y="2" width="4.3" height="12" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+          </button>
+          <span id="custom-grids-container"></span>
+          <button id="btn-add-grid" class="layout-btn" title="Add custom grid">
+            <svg viewBox="0 0 16 16" width="14" height="14"><line x1="8" y1="3" x2="8" y2="13" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="1.5"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="toolbar-right">
+        <button id="btn-global-settings" class="icon-btn" title="Global settings" style="font-size:14px;width:28px;height:28px">⚙</button>
+        <button id="btn-layouts" class="toolbar-action" title="Saved layouts">💾 Layouts</button>
+        <button id="btn-new-session" class="toolbar-action">+ New Session</button>
+        <button id="btn-file-explorer" class="toolbar-action">📁 Files</button>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main id="workspace">
+      <div id="snap-indicator"></div>
+      <div id="grid-overlay"></div>
+      <div id="welcome">
+        <div class="welcome-content">
+          <h1>Claude Code WebUI</h1>
+          <p>Multi-session terminal manager with tiling window support</p>
+          <div class="welcome-actions">
+            <button class="welcome-btn" id="welcome-new">Create New Session</button>
+            <button class="welcome-btn welcome-btn-secondary" id="welcome-files">Open File Explorer</button>
+          </div>
+          <div class="welcome-shortcuts">
+            <p>Drag windows to edges to snap | Use toolbar for layout presets | Toggle sidebar for sessions</p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Bottom Taskbar -->
+    <footer id="taskbar">
+      <div id="taskbar-items"></div>
+      <div id="taskbar-usage" class="taskbar-usage" title="Click for usage details"></div>
+      <div id="taskbar-status"><span id="active-count">0 active</span></div>
+    </footer>
+    <!-- Usage popup -->
+    <div id="usage-popup" class="usage-popup hidden"></div>
+  </div>
+
+  <!-- Dialogs -->
+  <div id="dialog-overlay" class="dialog-overlay hidden">
+    <!-- New Session Dialog -->
+    <div id="dialog-new-session" class="dialog hidden">
+      <div class="dialog-header"><h3>New Claude Code Session</h3><button class="dialog-close">✕</button></div>
+      <div class="dialog-body">
+        <label>Working Directory
+          <div class="autocomplete-wrapper">
+            <input type="text" id="input-cwd" placeholder="/home/user/project" autocomplete="off">
+            <div id="cwd-suggestions" class="autocomplete-dropdown hidden"></div>
+          </div>
+        </label>
+        <label>Session Name<input type="text" id="input-session-name" placeholder="My Project"></label>
+        <label>Model<select id="input-model"><option value="">Default</option><option value="opus">Opus</option><option value="sonnet">Sonnet</option><option value="haiku">Haiku</option></select></label>
+        <label>Permission Mode<select id="input-permission"><option value="">Default</option><option value="auto">Auto</option><option value="bypassPermissions">Bypass</option><option value="plan">Plan</option><option value="acceptEdits">Accept Edits</option></select></label>
+        <label>Additional Arguments<input type="text" id="input-extra-args" placeholder="--verbose"></label>
+      </div>
+      <div class="dialog-footer"><button class="btn-cancel">Cancel</button><button class="btn-create">Create Session</button></div>
+    </div>
+
+    <!-- Grid Config Dialog -->
+    <div id="dialog-grid" class="dialog hidden">
+      <div class="dialog-header"><h3>Add Grid Layout</h3><button class="dialog-close">✕</button></div>
+      <div class="dialog-body">
+        <div class="grid-config-row">
+          <label>Rows<input type="number" id="grid-rows" min="1" max="6" value="2"></label>
+          <label>Columns<input type="number" id="grid-cols" min="1" max="6" value="3"></label>
+        </div>
+        <div id="grid-preview" class="grid-preview"></div>
+      </div>
+      <div class="dialog-footer"><button class="btn-cancel">Cancel</button><button class="btn-create" id="btn-apply-grid">Add</button></div>
+    </div>
+
+    <!-- Layout Manager Dialog -->
+    <div id="dialog-layouts" class="dialog hidden">
+      <div class="dialog-header"><h3>Saved Layouts</h3><button class="dialog-close">✕</button></div>
+      <div class="dialog-body">
+        <div class="layout-save-row">
+          <input type="text" id="layout-save-name" placeholder="Layout name...">
+          <button class="btn-create" id="btn-layout-save" style="white-space:nowrap">Save Current</button>
+        </div>
+        <div id="saved-layouts-list" class="session-items" style="margin-top:8px"></div>
+      </div>
+      <div class="dialog-footer"><button class="btn-cancel">Cancel</button></div>
+    </div>
+  </div>
+
+  <script src="/bundle.js"></script>
+</body>
+</html>
