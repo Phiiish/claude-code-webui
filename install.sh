@@ -29,12 +29,11 @@ echo ""
 
 # Node.js 18+
 if ! command -v node &>/dev/null; then
-  echo "  [!] Node.js not found."
-  if [[ "$OSTYPE" == darwin* ]]; then
-    echo "      Install via: brew install node"
-  else
-    echo "      Install via: https://nodejs.org/ or your package manager"
-  fi
+  echo "  [!] Node.js not found. Please install Node.js 18+:"
+  echo "      macOS:         brew install node"
+  echo "      Ubuntu/Debian: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - && sudo apt install -y nodejs"
+  echo "      Fedora/RHEL:   sudo dnf install nodejs"
+  echo "      Or visit:      https://nodejs.org/"
   exit 1
 fi
 
@@ -48,24 +47,30 @@ echo "  [OK] Node.js $(node -v)"
 # dtach
 if ! command -v dtach &>/dev/null; then
   echo "  [!] dtach not found. Installing..."
-  if [[ "$OSTYPE" == darwin* ]]; then
-    if command -v brew &>/dev/null; then
-      brew install dtach </dev/null
-    else
-      echo "      Please install Homebrew first: https://brew.sh"
-      echo "      Then run: brew install dtach"
-      exit 1
-    fi
+  if [[ "$OSTYPE" == darwin* ]] && command -v brew &>/dev/null; then
+    brew install dtach </dev/null
   elif command -v apt-get &>/dev/null; then
     sudo apt-get install -y dtach </dev/null
+  elif command -v dnf &>/dev/null; then
+    sudo dnf install -y dtach </dev/null
   elif command -v yum &>/dev/null; then
     sudo yum install -y dtach </dev/null
+  elif command -v pacman &>/dev/null; then
+    sudo pacman -S --noconfirm dtach </dev/null
+  elif [[ "$OSTYPE" == darwin* ]]; then
+    echo "      Please install Homebrew first: https://brew.sh"
+    echo "      Then run: brew install dtach"
+    exit 1
   else
-    echo "      Please install dtach manually"
+    echo "      Please install dtach manually:"
+    echo "        macOS:        brew install dtach"
+    echo "        Ubuntu/Debian: sudo apt install dtach"
+    echo "        Fedora/RHEL:  sudo dnf install dtach"
+    echo "        Arch:         sudo pacman -S dtach"
     exit 1
   fi
 fi
-echo "  [OK] dtach $(dtach --help 2>&1 | head -1 || echo 'installed')"
+echo "  [OK] dtach"
 
 # Claude CLI
 if ! command -v claude &>/dev/null; then
