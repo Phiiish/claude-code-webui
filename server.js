@@ -920,19 +920,27 @@ wss.on('connection', (ws) => {
         const bufFile = path.join(BUFFERS_DIR, id + '.buf');
         const metaFileW = path.join(BUFFERS_DIR, id + '.json');
         let createPty;
+        // Build env vars for claude process
+        const sessionEnv = {
+          ...process.env,
+          EDITOR: EDITOR_CMD,
+          CLAUDE_WEBUI_PORT: String(PORT),
+          CLAUDE_WEBUI_SESSION_ID: id,
+          TERM: 'xterm-256color',
+          COLORTERM: 'truecolor',
+        };
+        if (process.env.DISPLAY) sessionEnv.DISPLAY = process.env.DISPLAY;
         try {
-          createPty = pty.spawn(DTACH_CMD, ['-c', socketPath, '-E', '-r', 'none',
+          createPty = pty.spawn(DTACH_CMD, ['-c', socketPath, '-E',
             NODE_CMD, PTY_WRAPPER,
             bufFile, metaFileW,
-            ENV_CMD, `EDITOR=${EDITOR_CMD}`, `CLAUDE_WEBUI_PORT=${PORT}`, `CLAUDE_WEBUI_SESSION_ID=${id}`, `DISPLAY=${process.env.DISPLAY || ''}`,
-            `TERM=xterm-256color`, `COLORTERM=truecolor`,
             CLAUDE_CMD, ...claudeArgs,
           ], {
             name: 'xterm-256color', cols: data.cols || 120, rows: data.rows || 30,
-            cwd, env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
+            cwd, env: sessionEnv,
           });
         } catch (err) {
-          ws.send(JSON.stringify({ type: 'error', message: `Failed to spawn session: ${err.message}\ndtach=${DTACH_CMD} node=${NODE_CMD} env=${ENV_CMD} cwd=${cwd}` }));
+          ws.send(JSON.stringify({ type: 'error', message: `Failed to spawn session: ${err.message}\ndtach=${DTACH_CMD} node=${NODE_CMD} cwd=${cwd}` }));
           return;
         }
         setupSessionPty(session, id, createPty);
