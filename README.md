@@ -94,7 +94,7 @@ Browser (xterm.js) <-> WebSocket <-> node-pty (dtach) <-> pty-wrapper.js <-> cla
 | Platform | Status | Notes |
 |----------|--------|-------|
 | Linux | Full support | Primary development platform |
-| macOS | Full support | Requires Homebrew for dtach |
+| macOS | Full support | Requires Homebrew for dtach. If node-pty fails: `npm rebuild node-pty --build-from-source` |
 | WSL2 | Should work | Install dtach via apt |
 | Windows (native) | Not supported | Requires WSL2 or remote Linux server |
 
