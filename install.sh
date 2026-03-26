@@ -126,7 +126,7 @@ npm install --no-fund --no-audit </dev/null 2>&1 | tail -3
 
 # Rebuild native modules for current platform (needed if switching OS or node version)
 echo "  Building native modules..."
-npm rebuild node-pty </dev/null 2>&1 | tail -1
+npm rebuild node-pty --build-from-source </dev/null 2>&1 | tail -1
 
 echo "  Building frontend..."
 npm run build 2>&1 | tail -1
