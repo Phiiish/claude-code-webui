@@ -70,7 +70,8 @@ function collectDescendantPids(socketPath) {
     while (queue.length) {
       const pid = queue.pop();
       try {
-        const children = execFileSync('ps', ['--ppid', String(pid), '-o', 'pid='], { encoding: 'utf-8', timeout: 2000 });
+        // macOS ps uses -o ppid= not --ppid; use pgrep -P instead (cross-platform)
+        const children = execFileSync('pgrep', ['-P', String(pid)], { encoding: 'utf-8', timeout: 2000 });
         for (const cl of children.trim().split('\n')) {
           const cpid = parseInt(cl.trim());
           if (cpid && !pids.has(cpid)) { pids.add(cpid); queue.push(cpid); }
@@ -466,27 +467,33 @@ app.post('/api/paste-image', (req, res) => {
     const buf = Buffer.from(match[2], 'base64');
     const tmpPath = path.join(os.tmpdir(), `claude-paste-${Date.now()}.${ext}`);
     fs.writeFileSync(tmpPath, buf);
-    // Set X clipboard via xclip piped from stdin (xclip -i <file> is unreliable).
-    // xclip stays alive as clipboard owner (X11 is owner-based).
-    const clipEnv = { ...process.env, DISPLAY: process.env.DISPLAY || ':99' };
+    // Set system clipboard with image — macOS uses osascript, Linux uses xclip
+    const isMac = process.platform === 'darwin';
     try {
-      const cp = spawn('bash', ['-c', `cat "${tmpPath}" | xclip -selection clipboard -t ${mimeType}`], {
-        env: clipEnv, detached: true, stdio: 'ignore',
-      });
-      cp.unref();
-      // Poll until clipboard has image target
-      const pollStart = Date.now();
-      const poll = () => {
-        try {
-          const out = execFileSync('xclip', ['-selection', 'clipboard', '-t', 'TARGETS', '-o'], {
-            env: clipEnv, encoding: 'utf-8', timeout: 1000,
-          });
-          if (out.includes('image/')) return res.json({ path: tmpPath, ready: true });
-        } catch {}
-        if (Date.now() - pollStart < 5000) setTimeout(poll, 200);
-        else res.json({ path: tmpPath, ready: false });
-      };
-      setTimeout(poll, 300);
+      if (isMac) {
+        // macOS: set clipboard via osascript (synchronous, no polling needed)
+        execFileSync('osascript', ['-e', `set the clipboard to (read POSIX file "${tmpPath}" as «class PNGf»)`], { timeout: 5000 });
+        res.json({ path: tmpPath, ready: true });
+      } else {
+        // Linux: xclip piped from stdin, stays alive as clipboard owner
+        const clipEnv = { ...process.env, DISPLAY: process.env.DISPLAY || ':99' };
+        const cp = spawn('bash', ['-c', `cat "${tmpPath}" | xclip -selection clipboard -t ${mimeType}`], {
+          env: clipEnv, detached: true, stdio: 'ignore',
+        });
+        cp.unref();
+        const pollStart = Date.now();
+        const poll = () => {
+          try {
+            const out = execFileSync('xclip', ['-selection', 'clipboard', '-t', 'TARGETS', '-o'], {
+              env: clipEnv, encoding: 'utf-8', timeout: 1000,
+            });
+            if (out.includes('image/')) return res.json({ path: tmpPath, ready: true });
+          } catch {}
+          if (Date.now() - pollStart < 5000) setTimeout(poll, 200);
+          else res.json({ path: tmpPath, ready: false });
+        };
+        setTimeout(poll, 300);
+      }
     } catch {
       res.json({ path: tmpPath, ready: false });
     }
