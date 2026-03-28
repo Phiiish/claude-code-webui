@@ -238,7 +238,7 @@ class FileExplorer {
           const badge = s.status === 'live' ? '● ' : s.status === 'tmux' ? '◆ ' : '';
           sub.push({ label: `${badge}${dispName}`, action: () => {
             if (s.status === 'stopped') this.app.resumeSession(s.sessionId, s.cwd, customName || s.name);
-            else if (s.status === 'live' && s.webuiId) this.app.attachSession(s.webuiId, s.webuiName || dispName, s.cwd);
+            else if (s.status === 'live' && s.webuiId) this.app.attachSession(s.webuiId, dispName, s.cwd);
             else if (s.status === 'tmux') this.app.attachTmuxSession(s.tmuxTarget, dispName, s.cwd);
           }});
         }

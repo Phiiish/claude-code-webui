@@ -113,20 +113,10 @@ class WindowManager {
     const onMove = (e) => {
       if (!dragging) return;
       element.style.left = (initL + e.clientX - startX) + 'px'; element.style.top = (initT + e.clientY - startY) + 'px';
-      if (!e.altKey) {
-        if (this.grid) this._showGridHighlight(e.clientX, e.clientY); else this._showSnap(e.clientX, e.clientY);
-      } else {
-        this.snapIndicator.style.display = 'none';
-        this._clearGridHighlight();
-      }
     };
     const onUp = (e) => {
       if (!dragging) return; dragging = false; element.classList.remove('dragging');
       this.snapIndicator.style.display = 'none';
-      if (!e.altKey) {
-        if (this.grid) { this._snapToGrid(win.id, e.clientX, e.clientY); }
-        else { const snap = this._getSnapZone(e.clientX, e.clientY); if (snap) this._applySnap(win.id, snap); }
-      }
       this._clearGridHighlight(); this.gridOverlay.classList.remove('dragging');
       // Re-capture proportional bounds after final position (snap or free drop)
       setTimeout(() => { this._captureGridBounds(win); this._scheduleOverlapUpdate(); }, 250);
@@ -298,6 +288,28 @@ class WindowManager {
   restore(id) { const win = this.windows.get(id); if (!win) return; win.element.style.display=''; win.isMinimized=false; this.focusWindow(id); setTimeout(() => { if (win.onResize) win.onResize(); }, 50); this._scheduleOverlapUpdate(); }
   closeWindow(id) { const win = this.windows.get(id); if (!win) return; if (win.onClose) win.onClose(); win.element.remove(); this.windows.delete(id); this._notify(); this._scheduleOverlapUpdate(); }
   setTitle(id, t) { const win = this.windows.get(id); if (win) { win.title=t; win.titleSpan.textContent=t; this._notify(); } }
+
+  positionActiveToLayout(layout, cellIdx) {
+    const win = this.windows.get(this.activeWindowId);
+    if (!win) return;
+    const gridMap = {
+      'maximize':      { rows: 1, cols: 1 },
+      'two-vertical':  { rows: 1, cols: 2 },
+      'two-horizontal':{ rows: 2, cols: 1 },
+      'quad':          { rows: 2, cols: 2 },
+      'three-columns': { rows: 1, cols: 3 },
+    };
+    let g = gridMap[layout];
+    if (!g && layout.startsWith('grid-')) {
+      const parts = layout.split('-');
+      g = { rows: parseInt(parts[1]), cols: parseInt(parts[2]) };
+    }
+    if (!g || !g.rows || !g.cols) return;
+    this.setGrid(g.rows, g.cols);
+    const total = g.rows * g.cols;
+    this._positionToCell(win, cellIdx % total, true);
+    setTimeout(() => { this._captureGridBounds(win); this._scheduleOverlapUpdate(); }, 250);
+  }
 
   applyLayout(layout) {
     if (layout === 'freeform') { this.setGrid(null); return; }

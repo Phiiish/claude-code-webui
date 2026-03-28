@@ -107,7 +107,8 @@ class LayoutManager {
           alive = activeSessions.find(s => s.id === ws.serverSessionId);
         }
         if (alive) {
-          const winInfo = this.app.attachSession(alive.id, alive.name, alive.cwd);
+          const customName = this.app.sidebar?.getCustomName(alive.claudeSessionId);
+          const winInfo = this.app.attachSession(alive.id, customName || alive.name, alive.cwd);
           applyPosition(winInfo, ws);
           // Restore split-pane editor if it was active (Ctrl+G)
           if (ws.editorState && winInfo) {

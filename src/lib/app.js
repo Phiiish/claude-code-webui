@@ -36,7 +36,7 @@ class App {
     this._setupDialogs();
     this._setupWelcome();
     this._setupGlobalSettings();
-    this._setupGridConfig();
+    // Grid config removed — layout hotkeys set up in _setupToolbar()
     this._setupLayoutManager();
     this._setupUsage();
 
@@ -56,10 +56,10 @@ class App {
   }
 
   _setupToolbar() {
-    document.querySelectorAll('.layout-btn[data-layout]').forEach(btn => btn.addEventListener('click', () => this.wm.applyLayout(btn.dataset.layout)));
     document.getElementById('btn-new-session').addEventListener('click', () => this.showNewSessionDialog());
     document.getElementById('btn-file-explorer').addEventListener('click', () => this.openFileExplorer());
     document.getElementById('btn-browser').addEventListener('click', () => this.openBrowser());
+    this._setupLayoutHotkeys();
   }
 
   _setupWelcome() {
@@ -145,120 +145,41 @@ class App {
     attachPopoverClose(pop, anchor);
   }
 
-  _setupGridConfig() {
-    const rowsInput = document.getElementById('grid-rows');
-    const colsInput = document.getElementById('grid-cols');
-    const preview = document.getElementById('grid-preview');
+  // ── Layout Hotkeys (Cmd+Arrow/UIJK/1-8) ──
+  _setupLayoutHotkeys() {
+    // Cmd+Arrow: half screen (1×2 or 2×1)
+    // Cmd+U/I/J/K: quarter screen (2×2)
+    // Cmd+1-8: eighth screen (2×4, left→right top→bottom)
+    const bindings = [
+      // Half screen
+      { key: 'ArrowLeft',  layout: 'grid-1-2', cell: 0 }, // left half
+      { key: 'ArrowRight', layout: 'grid-1-2', cell: 1 }, // right half
+      { key: 'ArrowUp',    layout: 'grid-2-1', cell: 0 }, // top half
+      { key: 'ArrowDown',  layout: 'grid-2-1', cell: 1 }, // bottom half
+      // Quarter screen (2×2): U=top-left, I=top-right, J=bottom-left, K=bottom-right
+      { key: 'u', layout: 'grid-2-2', cell: 0 },
+      { key: 'i', layout: 'grid-2-2', cell: 1 },
+      { key: 'j', layout: 'grid-2-2', cell: 2 },
+      { key: 'k', layout: 'grid-2-2', cell: 3 },
+      // Eighth screen (2×4): 1-8 left→right, top→bottom
+      { key: '1', layout: 'grid-2-4', cell: 0 },
+      { key: '2', layout: 'grid-2-4', cell: 1 },
+      { key: '3', layout: 'grid-2-4', cell: 2 },
+      { key: '4', layout: 'grid-2-4', cell: 3 },
+      { key: '5', layout: 'grid-2-4', cell: 4 },
+      { key: '6', layout: 'grid-2-4', cell: 5 },
+      { key: '7', layout: 'grid-2-4', cell: 6 },
+      { key: '8', layout: 'grid-2-4', cell: 7 },
+    ];
 
-    const updatePreview = () => {
-      const r = parseInt(rowsInput.value) || 2, c = parseInt(colsInput.value) || 2;
-      preview.style.gridTemplateRows = `repeat(${r}, 1fr)`;
-      preview.style.gridTemplateColumns = `repeat(${c}, 1fr)`;
-      preview.innerHTML = '';
-      for (let i = 0; i < r * c; i++) {
-        const cell = document.createElement('div'); cell.className = 'grid-preview-cell'; cell.textContent = i + 1;
-        preview.appendChild(cell);
-      }
-    };
-
-    document.getElementById('btn-add-grid').addEventListener('click', () => {
-      updatePreview();
-      this._showDialog('dialog-grid');
-    });
-    rowsInput.addEventListener('input', updatePreview);
-    colsInput.addEventListener('input', updatePreview);
-
-    document.getElementById('btn-apply-grid').addEventListener('click', () => {
-      const r = parseInt(rowsInput.value) || 2, c = parseInt(colsInput.value) || 2;
-      this._addCustomGrid(r, c);
-      this.hideDialogs();
-    });
-
-    // Load saved custom grids on startup
-    this._loadCustomGrids();
-  }
-
-  _gridIcon(rows, cols) {
-    // For grids up to 4x4, render SVG cells; otherwise show "RxC" text
-    if (rows * cols > 16) {
-      return `<span style="font-size:9px;font-weight:600;line-height:14px">${rows}x${cols}</span>`;
-    }
-    const gap = 1, size = 16;
-    const cw = (size - gap * (cols + 1)) / cols;
-    const ch = (size - gap * (rows + 1)) / rows;
-    const sw = Math.min(1.2, 14 / (rows * cols + 4));
-    let rects = '';
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const x = gap + c * (cw + gap), y = gap + r * (ch + gap);
-        rects += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${cw.toFixed(1)}" height="${ch.toFixed(1)}" fill="none" stroke="currentColor" stroke-width="${sw}"/>`;
-      }
-    }
-    return `<svg viewBox="0 0 16 16" width="14" height="14">${rects}</svg>`;
-  }
-
-  _renderCustomGridButton(rows, cols) {
-    const btn = document.createElement('button');
-    btn.className = 'layout-btn custom-grid-btn';
-    btn.title = `${rows}×${cols} grid`;
-    btn.innerHTML = this._gridIcon(rows, cols);
-    btn.dataset.gridRows = rows;
-    btn.dataset.gridCols = cols;
-    btn.onclick = () => this.wm.applyLayout(`grid-${rows}-${cols}`);
-    // Register this grid size in window manager
-    btn.oncontextmenu = (e) => {
+    document.addEventListener('keydown', (e) => {
+      if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      const match = bindings.find(b => e.key === b.key || e.key.toLowerCase() === b.key);
+      if (!match) return;
+      if (!this.wm.activeWindowId) return;
       e.preventDefault();
-      this._removeCustomGrid(rows, cols);
-    };
-    return btn;
-  }
-
-  async _loadCustomGrids() {
-    try {
-      const res = await fetch('/api/layouts');
-      const data = await res.json();
-      const grids = data.customGrids || [];
-      this._customGrids = grids;
-      this._renderCustomGridButtons();
-    } catch {}
-  }
-
-  _renderCustomGridButtons() {
-    const container = document.getElementById('custom-grids-container');
-    container.innerHTML = '';
-    for (const g of this._customGrids || []) {
-      container.appendChild(this._renderCustomGridButton(g.rows, g.cols));
-    }
-  }
-
-  async _addCustomGrid(rows, cols) {
-    // Apply grid immediately
-    this.wm.setGrid(rows, cols);
-    // Check if it's a built-in preset — don't save those
-    const builtins = [[1,1],[1,2],[2,1],[2,2],[1,3]];
-    if (builtins.some(([r,c]) => r === rows && c === cols)) return;
-    // Save to server
-    try {
-      const res = await fetch('/api/custom-grids', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows, cols }),
-      });
-      const data = await res.json();
-      this._customGrids = data.customGrids || [];
-      this._renderCustomGridButtons();
-    } catch {}
-  }
-
-  async _removeCustomGrid(rows, cols) {
-    try {
-      const res = await fetch('/api/custom-grids', {
-        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows, cols }),
-      });
-      const data = await res.json();
-      this._customGrids = data.customGrids || [];
-      this._renderCustomGridButtons();
-    } catch {}
+      this.wm.positionActiveToLayout(match.layout, match.cell);
+    });
   }
 
   _setupUsage() {
