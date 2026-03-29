@@ -625,52 +625,17 @@ class Sidebar {
         nameSpan.title = 'Double-click to rename';
       }
 
-      // Resume all stopped sessions in group
-      const resumeAllBtn = document.createElement('button');
-      resumeAllBtn.className = 'folder-add-btn';
-      resumeAllBtn.textContent = '\u25B6';
-      resumeAllBtn.title = 'Resume all sessions in "' + groupName + '"';
-      resumeAllBtn.onclick = (e) => {
-        e.stopPropagation();
-        for (const s of groupSessions) {
-          if (s.status === 'stopped') {
-            const customName = this.getCustomName(s.sessionId);
-            this.app.resumeSession(s.sessionId, s.cwd, customName || s.name);
-          } else if (s.status === 'live' && s.webuiId) {
-            this.app.attachSession(s.webuiId, s.webuiName || s.name, s.cwd);
-          } else if (s.status === 'tmux') {
-            this.app.attachTmuxSession(s.tmuxTarget, s.name, s.cwd);
-          }
-        }
-      };
-      header.appendChild(resumeAllBtn);
+      // Group header buttons (configurable)
+      const headerButtons = this.app.settings?.get('sidebar.groupHeaderButtons') ?? ['resumeAll', 'linkedFolders', 'delete'];
+      this._renderGroupHeaderButtons(header, groupName, groupSessions, linkedFolders, headerButtons);
 
-      // Linked folders button
-      if (linkedFolders.length > 0 || true) { // always show so user can add folders
-        const foldersBtn = document.createElement('button');
-        foldersBtn.className = 'folder-add-btn';
-        foldersBtn.textContent = '\uD83D\uDCC1';
-        foldersBtn.style.fontSize = '10px';
-        foldersBtn.title = 'Linked folders' + (linkedFolders.length ? ': ' + linkedFolders.join(', ') : ' (none)');
-        foldersBtn.onclick = (e) => {
-          e.stopPropagation();
-          this._showGroupFoldersPopover(foldersBtn, groupName);
-        };
-        header.appendChild(foldersBtn);
+      // Right-click context menu
+      if (this.app.settings?.get('sidebar.groupRightClickMenu') ?? true) {
+        header.addEventListener('contextmenu', (e) => {
+          e.preventDefault(); e.stopPropagation();
+          this._showGroupContextMenu(e.clientX, e.clientY, groupName);
+        });
       }
-
-      // Delete group button
-      const delBtn = document.createElement('button');
-      delBtn.className = 'folder-add-btn';
-      delBtn.textContent = '\u00D7';
-      delBtn.title = 'Delete group "' + groupName + '"';
-      delBtn.onclick = (e) => {
-        e.stopPropagation();
-        if (confirm('Delete group "' + groupName + '"? (Sessions will not be deleted)')) {
-          this._deleteGroup(groupName);
-        }
-      };
-      header.appendChild(delBtn);
 
       header.onclick = (e) => {
         if (e.target.closest('.folder-add-btn')) return;
@@ -998,6 +963,157 @@ class Sidebar {
 
     document.body.appendChild(pop);
     attachPopoverClose(pop, anchor);
+  }
+
+  // ── Group Header Buttons + Context Menu ──
+
+  _renderGroupHeaderButtons(header, groupName, groupSessions, linkedFolders, enabledButtons) {
+    if (enabledButtons.includes('resumeAll')) {
+      const btn = document.createElement('button');
+      btn.className = 'folder-add-btn'; btn.textContent = '\u25B6';
+      btn.title = 'Resume all sessions in "' + groupName + '"';
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        for (const s of groupSessions) {
+          if (s.status === 'stopped') this.app.resumeSession(s.sessionId, s.cwd, this.getCustomName(s.sessionId) || s.name);
+          else if (s.status === 'live' && s.webuiId) this.app.attachSession(s.webuiId, s.webuiName || s.name, s.cwd);
+          else if (s.status === 'tmux') this.app.attachTmuxSession(s.tmuxTarget, s.name, s.cwd);
+        }
+      };
+      header.appendChild(btn);
+    }
+    if (enabledButtons.includes('linkedFolders')) {
+      const btn = document.createElement('button');
+      btn.className = 'folder-add-btn'; btn.textContent = '\uD83D\uDCC1'; btn.style.fontSize = '10px';
+      btn.title = 'Linked folders' + (linkedFolders.length ? ': ' + linkedFolders.join(', ') : ' (none)');
+      btn.onclick = (e) => { e.stopPropagation(); this._showGroupFoldersPopover(btn, groupName); };
+      header.appendChild(btn);
+    }
+    if (enabledButtons.includes('delete')) {
+      const btn = document.createElement('button');
+      btn.className = 'folder-add-btn'; btn.textContent = '\u00D7';
+      btn.title = 'Delete group "' + groupName + '"';
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        if (confirm('Delete group "' + groupName + '"? (Sessions will not be deleted)')) this._deleteGroup(groupName);
+      };
+      header.appendChild(btn);
+    }
+  }
+
+  _showGroupContextMenu(x, y, groupName) {
+    document.querySelectorAll('.context-menu').forEach(m => m.remove());
+    const menu = document.createElement('div'); menu.className = 'context-menu';
+    menu.style.left = x + 'px'; menu.style.top = y + 'px';
+
+    const items = [
+      { label: '\uD83D\uDCC1 Add sessions by folder...', action: () => this._showFolderBrowser(groupName) },
+      { label: '\u270F Rename group', action: () => {
+        const n = prompt('Rename group:', groupName);
+        if (n && n.trim() && n.trim() !== groupName) this._renameGroup(groupName, n.trim());
+      }},
+      { separator: true },
+      { label: '\u2715 Delete group', style: 'color:var(--red,#e55)', action: () => {
+        if (confirm('Delete group "' + groupName + '"? (Sessions will not be deleted)')) this._deleteGroup(groupName);
+      }},
+    ];
+    for (const item of items) {
+      if (item.separator) {
+        const sep = document.createElement('div'); sep.className = 'context-menu-separator'; menu.appendChild(sep); continue;
+      }
+      const el = document.createElement('div'); el.className = 'context-menu-item'; el.textContent = item.label;
+      if (item.style) el.style.cssText = item.style;
+      el.onclick = () => { menu.remove(); item.action(); };
+      menu.appendChild(el);
+    }
+    document.body.appendChild(menu);
+    attachPopoverClose(menu);
+  }
+
+  async _showFolderBrowser(groupName) {
+    document.querySelectorAll('.folder-browser-overlay').forEach(el => el.remove());
+    const overlay = document.createElement('div'); overlay.className = 'folder-browser-overlay';
+    overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    const dialog = document.createElement('div'); dialog.className = 'folder-browser-dialog';
+
+    const header = document.createElement('div'); header.className = 'folder-browser-header';
+    const title = document.createElement('h3'); title.textContent = 'Add folder to "' + groupName + '"';
+    const closeBtn = document.createElement('button'); closeBtn.className = 'dialog-close'; closeBtn.textContent = '\u2715';
+    closeBtn.onclick = () => overlay.remove();
+    header.append(title, closeBtn);
+
+    const pathBar = document.createElement('div'); pathBar.className = 'folder-browser-pathbar';
+    const pathInput = document.createElement('input'); pathInput.className = 'folder-browser-path-input';
+    const goBtn = document.createElement('button'); goBtn.className = 'folder-browser-go-btn'; goBtn.textContent = 'Go';
+    pathBar.append(pathInput, goBtn);
+
+    const list = document.createElement('div'); list.className = 'folder-browser-list';
+
+    const footer = document.createElement('div'); footer.className = 'folder-browser-footer';
+    const selectBtn = document.createElement('button'); selectBtn.className = 'btn-create'; selectBtn.textContent = '+ Add this folder';
+    footer.appendChild(selectBtn);
+
+    dialog.append(header, pathBar, list, footer);
+    overlay.appendChild(dialog); document.body.appendChild(overlay);
+
+    let currentPath = '';
+    const navigate = async (dirPath) => {
+      list.innerHTML = ''; list.insertAdjacentHTML('beforeend', '<div class="empty-hint">Loading...</div>');
+      try {
+        const res = await fetch('/api/files?path=' + encodeURIComponent(dirPath));
+        const data = await res.json(); if (data.error) throw new Error(data.error);
+        currentPath = data.path; pathInput.value = currentPath; list.innerHTML = '';
+
+        if (currentPath !== '/') {
+          const parent = document.createElement('div'); parent.className = 'folder-browser-item';
+          parent.textContent = '\uD83D\uDCC1 ..';
+          parent.onclick = () => navigate(currentPath.replace(/\/[^/]+\/?$/, '') || '/');
+          list.appendChild(parent);
+        }
+        const dirs = (data.items || []).filter(i => i.isDirectory).sort((a, b) => (b.modified || 0) - (a.modified || 0));
+        for (const d of dirs) {
+          const item = document.createElement('div'); item.className = 'folder-browser-item';
+          const icon = document.createElement('span'); icon.textContent = '\uD83D\uDCC1';
+          const name = document.createElement('span'); name.className = 'folder-browser-item-name'; name.textContent = d.name;
+          const mod = document.createElement('span'); mod.className = 'folder-browser-item-time';
+          mod.textContent = d.modified ? new Date(d.modified).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+          item.append(icon, name, mod);
+          item.onclick = () => navigate(currentPath + '/' + d.name);
+          list.appendChild(item);
+        }
+        if (!dirs.length && currentPath !== '/') list.insertAdjacentHTML('beforeend', '<div class="empty-hint">No subfolders</div>');
+      } catch (err) { list.innerHTML = '<div class="empty-hint" style="color:var(--red)">' + escHtml(err.message) + '</div>'; }
+    };
+
+    goBtn.onclick = () => { if (pathInput.value.trim()) navigate(pathInput.value.trim()); };
+    pathInput.onkeydown = (e) => { if (e.key === 'Enter') goBtn.click(); };
+    selectBtn.onclick = () => { if (!currentPath) return; overlay.remove(); this._addFolderWithConflictCheck(currentPath, groupName); };
+
+    try { const r = await fetch('/api/home'); const d = await r.json(); navigate(d.home); } catch { navigate('/'); }
+  }
+
+  _addFolderWithConflictCheck(fp, groupName) {
+    const conflicting = [];
+    for (const s of this._allSessions) {
+      const cwd = s.cwd || '';
+      if (cwd === fp || cwd.startsWith(fp + '/')) {
+        for (const g of this._getSessionGroups(s.sessionId)) {
+          if (g !== groupName && (this._sessionGroups[g] || []).includes(s.sessionId)) {
+            conflicting.push({ session: s, fromGroup: g });
+          }
+        }
+      }
+    }
+    if (conflicting.length > 0) {
+      const names = conflicting.map(c => '"' + (c.session.name || c.session.sessionId.substring(0, 12)) + '" (in ' + c.fromGroup + ')').join('\n');
+      if (!confirm(conflicting.length + ' session(s) already in other groups:\n\n' + names + '\n\nMove them to "' + groupName + '"?\n\nOK = Move, Cancel = Skip')) return;
+      for (const c of conflicting) {
+        const ids = this._sessionGroups[c.fromGroup];
+        if (ids) this._sessionGroups[c.fromGroup] = ids.filter(id => id !== c.session.sessionId);
+      }
+    }
+    this._addFolderToGroup(fp, groupName);
   }
 
   _showFolderGroupPopover(anchor, folderPath) {

@@ -98,6 +98,22 @@ const SETTINGS_SCHEMA = {
     description: 'Which session statuses to show by default',
     category: 'Sidebar', liveApply: false,
   },
+  'sidebar.groupHeaderButtons': {
+    type: 'multiSelect', default: ['resumeAll', 'linkedFolders', 'delete'],
+    options: [
+      { value: 'resumeAll', label: '▶ Resume All' },
+      { value: 'linkedFolders', label: '📁 Linked Folders' },
+      { value: 'delete', label: '× Delete' },
+    ],
+    label: 'Group header buttons',
+    description: 'Choose which action buttons to show on group headers',
+    category: 'Sidebar', liveApply: false,
+  },
+  'sidebar.groupRightClickMenu': {
+    type: 'boolean', default: true, label: 'Group right-click menu',
+    description: 'Right-click group header for context menu (Add folder, Rename, Delete)',
+    category: 'Sidebar', liveApply: false,
+  },
   'sidebar.enableAutoGrouping': {
     type: 'boolean', default: false, label: 'Auto domain grouping',
     description: 'Automatically group sessions by workspace path or name prefix',
