@@ -361,13 +361,21 @@ class Sidebar {
   // ── Highlight / Sort / Filter ──
 
   highlightSession(sessionId) {
-    this.listEl.querySelectorAll('.session-item-card').forEach(c => c.classList.remove('highlighted'));
+    this.listEl.querySelectorAll('.session-item-card').forEach(c => {
+      c.classList.remove('highlighted', 'highlight-flash');
+    });
     if (!sessionId) return;
     const cards = this.listEl.querySelectorAll('.session-item-card');
     for (const card of cards) {
       if (card._sessionId === sessionId) {
         card.classList.add('highlighted');
-        // Scroll into view if needed
+        // Auto-expand collapsed parent group
+        const group = card.closest('.folder-group');
+        if (group && group.classList.contains('collapsed')) {
+          group.classList.remove('collapsed');
+        }
+        // Flash animation
+        requestAnimationFrame(() => card.classList.add('highlight-flash'));
         if (card.scrollIntoViewIfNeeded) card.scrollIntoViewIfNeeded(false);
         else card.scrollIntoView({ block: 'nearest' });
         break;
