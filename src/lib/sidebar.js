@@ -259,14 +259,40 @@ class Sidebar {
     if (!this._groupFolders[groupName]) this._groupFolders[groupName] = [];
     if (!this._groupFolders[groupName].includes(folderPath)) {
       this._groupFolders[groupName].push(folderPath);
-      this._pushUserState();
-      this._render();
     }
+    // Directly assign all matching sessions so they show this group in details
+    if (!this._sessionGroups[groupName]) this._sessionGroups[groupName] = [];
+    const ids = this._sessionGroups[groupName];
+    for (const s of this._allSessions) {
+      const cwd = s.cwd || '';
+      if ((cwd === folderPath || cwd.startsWith(folderPath + '/')) && !ids.includes(s.sessionId)) {
+        ids.push(s.sessionId);
+      }
+    }
+    this._pushUserState();
+    this._render();
   }
 
   _removeFolderFromGroup(folderPath, groupName) {
     if (!this._groupFolders[groupName]) return;
     this._groupFolders[groupName] = this._groupFolders[groupName].filter(p => p !== folderPath);
+    // Remove sessions that were under this folder from the direct assignment
+    // (keep sessions that are still covered by other linked folders)
+    if (this._sessionGroups[groupName]) {
+      const remainingFolders = this._groupFolders[groupName] || [];
+      this._sessionGroups[groupName] = this._sessionGroups[groupName].filter(sid => {
+        const s = this._allSessions.find(x => x.sessionId === sid);
+        if (!s) return true; // keep unknown sessions
+        const cwd = s.cwd || '';
+        // Was this session matched by the removed folder?
+        if (cwd !== folderPath && !cwd.startsWith(folderPath + '/')) return true; // not from this folder, keep
+        // Is it still covered by another linked folder?
+        for (const fp of remainingFolders) {
+          if (cwd === fp || cwd.startsWith(fp + '/')) return true;
+        }
+        return false; // only covered by removed folder, remove from group
+      });
+    }
     this._pushUserState();
     this._render();
   }
@@ -1004,6 +1030,7 @@ class Sidebar {
   _showGroupContextMenu(x, y, groupName) {
     document.querySelectorAll('.context-menu').forEach(m => m.remove());
     const menu = document.createElement('div'); menu.className = 'context-menu';
+    // Position, then adjust if off-screen
     menu.style.left = x + 'px'; menu.style.top = y + 'px';
 
     const items = [
@@ -1027,6 +1054,12 @@ class Sidebar {
       menu.appendChild(el);
     }
     document.body.appendChild(menu);
+    // Adjust if off-screen
+    requestAnimationFrame(() => {
+      const rect = menu.getBoundingClientRect();
+      if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 4) + 'px';
+      if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 4) + 'px';
+    });
     attachPopoverClose(menu);
   }
 
@@ -1079,7 +1112,7 @@ class Sidebar {
           const mod = document.createElement('span'); mod.className = 'folder-browser-item-time';
           mod.textContent = d.modified ? new Date(d.modified).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
           item.append(icon, name, mod);
-          item.onclick = () => navigate(currentPath + '/' + d.name);
+          item.onclick = () => navigate((currentPath === '/' ? '' : currentPath) + '/' + d.name);
           list.appendChild(item);
         }
         if (!dirs.length && currentPath !== '/') list.insertAdjacentHTML('beforeend', '<div class="empty-hint">No subfolders</div>');
