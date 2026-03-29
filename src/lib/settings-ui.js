@@ -33,6 +33,60 @@ class SettingsUI {
     title.textContent = 'Settings';
     const headerRight = document.createElement('div');
     headerRight.className = 'settings-header-actions';
+    // Export
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'settings-header-btn'; exportBtn.textContent = 'Export';
+    exportBtn.title = 'Export all presets to webui-preset.json';
+    // Allowlist of localStorage keys to include in presets
+    const CLIENT_STATE_KEYS = ['fileExplorerSettings', 'fileExplorerColumns', 'termFontSize', 'termFontFamily', 'theme', 'sidebarWidth'];
+
+    exportBtn.onclick = async () => {
+      try {
+        const res = await fetch('/api/preset');
+        if (!res.ok) { alert('Export failed: server returned ' + res.status); return; }
+        const preset = await res.json();
+        const clientState = {};
+        for (const k of CLIENT_STATE_KEYS) { const v = localStorage.getItem(k); if (v !== null) clientState[k] = v; }
+        preset.clientState = clientState;
+        const saveRes = await fetch('/api/preset/save', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(preset),
+        });
+        const d = await saveRes.json();
+        if (saveRes.ok) alert('Preset exported to:\n' + (d.path || 'webui-preset.json'));
+        else alert('Export failed: ' + (d.error || 'unknown'));
+      } catch (err) { alert('Export failed: ' + err.message); }
+    };
+
+    // Import
+    const importBtn = document.createElement('button');
+    importBtn.className = 'settings-header-btn'; importBtn.textContent = 'Import';
+    importBtn.title = 'Import presets from file';
+    importBtn.onclick = () => {
+      const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
+      input.onchange = async () => {
+        const file = input.files[0]; if (!file) return;
+        try {
+          const preset = JSON.parse(await file.text());
+          if (!preset._version && !preset._format) { alert('Invalid preset file'); return; }
+          const sections = Object.keys(preset).filter(k => !k.startsWith('_'));
+          if (!confirm('Import preset (' + sections.join(', ') + ')?\n\nThis will overwrite current settings.')) return;
+          const res = await fetch('/api/preset/import', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(preset),
+          });
+          if (res.ok) {
+            // Issue 4: only restore allowlisted localStorage keys
+            if (preset.clientState && typeof preset.clientState === 'object') {
+              for (const [k, v] of Object.entries(preset.clientState)) {
+                if (CLIENT_STATE_KEYS.includes(k)) localStorage.setItem(k, v);
+              }
+            }
+            alert('Imported. Reloading...'); location.reload();
+          } else alert('Import failed');
+        } catch (err) { alert('Import failed: ' + err.message); }
+      };
+      input.click();
+    };
+
     const resetAllBtn = document.createElement('button');
     resetAllBtn.className = 'settings-header-btn';
     resetAllBtn.textContent = 'Reset All';
@@ -42,7 +96,7 @@ class SettingsUI {
     closeBtn.className = 'dialog-close';
     closeBtn.textContent = '✕';
     closeBtn.onclick = () => overlay.remove();
-    headerRight.append(resetAllBtn, closeBtn);
+    headerRight.append(exportBtn, importBtn, resetAllBtn, closeBtn);
     header.append(title, headerRight);
 
     // Search
