@@ -52,6 +52,10 @@ class Sidebar {
 
     // Build tab bar
     this._buildTabBar();
+    // Rebuild tab bar when settings change
+    const rebuildTabs = () => { this._buildTabBar(); this._render(); };
+    this.app.settings?.on('sidebar.showFoldersView', rebuildTabs);
+    this.app.settings?.on('sidebar.showGroupsView', rebuildTabs);
 
     // Sort toggle
     const sortBtn = document.getElementById('sort-toggle');
@@ -147,24 +151,45 @@ class Sidebar {
   // ── Tab Bar ──
 
   _buildTabBar() {
-    const section = this.listEl.parentElement; // the sidebar-section div containing the list
+    const section = this.listEl.parentElement;
+    // Remove existing tab bar if rebuilding
+    this.el.querySelector('.sidebar-tabs')?.remove();
+
+    const settings = this.app.settings;
+    const showFolders = settings?.get('sidebar.showFoldersView') ?? true;
+    const showGroups = settings?.get('sidebar.showGroupsView') ?? true;
+
+    // If only one view enabled, use it directly without tabs
+    if (!showFolders && !showGroups) {
+      this._activeTab = 'folders'; // fallback: flat list via folders
+      return;
+    }
+    if (showFolders && !showGroups) {
+      this._activeTab = 'folders';
+      return; // no tab bar needed
+    }
+    if (!showFolders && showGroups) {
+      this._activeTab = 'groups';
+      return; // no tab bar needed
+    }
+
+    // Both enabled: show tab bar
     const tabBar = document.createElement('div');
     tabBar.className = 'sidebar-tabs';
 
     const foldersTab = document.createElement('button');
-    foldersTab.className = 'sidebar-tab active';
+    foldersTab.className = 'sidebar-tab' + (this._activeTab === 'folders' ? ' active' : '');
     foldersTab.textContent = 'Folders';
     foldersTab.dataset.tab = 'folders';
     foldersTab.onclick = () => { this._activeTab = 'folders'; this._updateTabs(); this._render(); };
 
     const groupsTab = document.createElement('button');
-    groupsTab.className = 'sidebar-tab';
+    groupsTab.className = 'sidebar-tab' + (this._activeTab === 'groups' ? ' active' : '');
     groupsTab.textContent = 'Groups';
     groupsTab.dataset.tab = 'groups';
     groupsTab.onclick = () => { this._activeTab = 'groups'; this._updateTabs(); this._render(); };
 
     tabBar.append(foldersTab, groupsTab);
-    // Insert tab bar before the filter row (first child of section)
     section.insertBefore(tabBar, section.firstChild);
   }
 
