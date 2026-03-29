@@ -650,28 +650,31 @@ class Sidebar {
         nameSpan.title = 'Double-click to rename';
       }
 
-      // Resume all stopped sessions in group
-      const resumeAllBtn = document.createElement('button');
-      resumeAllBtn.className = 'folder-add-btn';
-      resumeAllBtn.textContent = '\u25B6';
-      resumeAllBtn.title = 'Resume all sessions in "' + groupName + '"';
-      resumeAllBtn.onclick = (e) => {
-        e.stopPropagation();
-        for (const s of groupSessions) {
-          if (s.status === 'stopped') {
-            const customName = this.getCustomName(s.sessionId);
-            this.app.resumeSession(s.sessionId, s.cwd, customName || s.name);
-          } else if (s.status === 'live' && s.webuiId) {
-            this.app.attachSession(s.webuiId, s.webuiName || s.name, s.cwd);
-          } else if (s.status === 'tmux') {
-            this.app.attachTmuxSession(s.tmuxTarget, s.name, s.cwd);
-          }
-        }
-      };
-      header.appendChild(resumeAllBtn);
+      // Group header buttons (configurable via settings)
+      const headerButtons = this.app.settings?.get('sidebar.groupHeaderButtons') ?? ['resumeAll', 'linkedFolders', 'delete'];
 
-      // Linked folders button
-      if (linkedFolders.length > 0 || true) { // always show so user can add folders
+      if (headerButtons.includes('resumeAll')) {
+        const resumeAllBtn = document.createElement('button');
+        resumeAllBtn.className = 'folder-add-btn';
+        resumeAllBtn.textContent = '\u25B6';
+        resumeAllBtn.title = 'Resume all sessions in "' + groupName + '"';
+        resumeAllBtn.onclick = (e) => {
+          e.stopPropagation();
+          for (const s of groupSessions) {
+            if (s.status === 'stopped') {
+              const customName = this.getCustomName(s.sessionId);
+              this.app.resumeSession(s.sessionId, s.cwd, customName || s.name);
+            } else if (s.status === 'live' && s.webuiId) {
+              this.app.attachSession(s.webuiId, s.webuiName || s.name, s.cwd);
+            } else if (s.status === 'tmux') {
+              this.app.attachTmuxSession(s.tmuxTarget, s.name, s.cwd);
+            }
+          }
+        };
+        header.appendChild(resumeAllBtn);
+      }
+
+      if (headerButtons.includes('linkedFolders')) {
         const foldersBtn = document.createElement('button');
         foldersBtn.className = 'folder-add-btn';
         foldersBtn.textContent = '\uD83D\uDCC1';
@@ -684,18 +687,27 @@ class Sidebar {
         header.appendChild(foldersBtn);
       }
 
-      // Delete group button
-      const delBtn = document.createElement('button');
-      delBtn.className = 'folder-add-btn';
-      delBtn.textContent = '\u00D7';
-      delBtn.title = 'Delete group "' + groupName + '"';
-      delBtn.onclick = (e) => {
-        e.stopPropagation();
-        if (confirm('Delete group "' + groupName + '"? (Sessions will not be deleted)')) {
-          this._deleteGroup(groupName);
-        }
-      };
-      header.appendChild(delBtn);
+      if (headerButtons.includes('delete')) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'folder-add-btn';
+        delBtn.textContent = '\u00D7';
+        delBtn.title = 'Delete group "' + groupName + '"';
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (confirm('Delete group "' + groupName + '"? (Sessions will not be deleted)')) {
+            this._deleteGroup(groupName);
+          }
+        };
+        header.appendChild(delBtn);
+      }
+
+      // Right-click context menu on group header
+      if (this.app.settings?.get('sidebar.groupRightClickMenu') ?? true) {
+        header.addEventListener('contextmenu', (e) => {
+          e.preventDefault(); e.stopPropagation();
+          this._showGroupContextMenu(e.clientX, e.clientY, groupName, groupSessions);
+        });
+      }
 
       header.onclick = (e) => {
         if (e.target.closest('.folder-add-btn')) return;
@@ -1023,6 +1035,94 @@ class Sidebar {
 
     document.body.appendChild(pop);
     attachPopoverClose(pop, anchor);
+  }
+
+  _showGroupContextMenu(x, y, groupName, groupSessions) {
+    document.querySelectorAll('.context-menu').forEach(m => m.remove());
+    const menu = document.createElement('div'); menu.className = 'context-menu';
+    menu.style.left = x + 'px'; menu.style.top = y + 'px';
+
+    // Add sessions by folder
+    const addFolderItem = document.createElement('div'); addFolderItem.className = 'context-menu-item';
+    addFolderItem.textContent = '📁 Add sessions by folder...';
+    addFolderItem.onclick = () => { menu.remove(); this._addFolderToGroupDialog(groupName); };
+    menu.appendChild(addFolderItem);
+
+    // Rename group
+    const renameItem = document.createElement('div'); renameItem.className = 'context-menu-item';
+    renameItem.textContent = '✎ Rename group';
+    renameItem.onclick = () => {
+      menu.remove();
+      const newName = prompt('Rename group:', groupName);
+      if (newName && newName.trim() && newName.trim() !== groupName) {
+        this._renameGroup(groupName, newName.trim());
+      }
+    };
+    menu.appendChild(renameItem);
+
+    // Separator
+    const sep = document.createElement('div'); sep.className = 'context-menu-separator';
+    menu.appendChild(sep);
+
+    // Delete group
+    const deleteItem = document.createElement('div'); deleteItem.className = 'context-menu-item';
+    deleteItem.style.color = 'var(--red, #e55)';
+    deleteItem.textContent = '✕ Delete group';
+    deleteItem.onclick = () => {
+      menu.remove();
+      if (confirm(`Delete group "${groupName}"? (Sessions will not be deleted)`)) {
+        this._deleteGroup(groupName);
+      }
+    };
+    menu.appendChild(deleteItem);
+
+    document.body.appendChild(menu);
+    attachPopoverClose(menu);
+  }
+
+  _addFolderToGroupDialog(groupName) {
+    const folderPath = prompt('Enter folder path (sessions in this folder and subfolders will be added to the group):');
+    if (!folderPath || !folderPath.trim()) return;
+    const fp = folderPath.trim();
+
+    // Check for sessions in other groups that would be affected
+    const allSessions = this._allSessions;
+    const conflicting = [];
+    for (const s of allSessions) {
+      const cwd = s.cwd || '';
+      if (cwd === fp || cwd.startsWith(fp + '/')) {
+        const existingGroups = this._getSessionGroups(s.sessionId);
+        // Check if session is directly assigned to another group (not just folder-matched)
+        for (const g of existingGroups) {
+          if (g !== groupName && (this._sessionGroups[g] || []).includes(s.sessionId)) {
+            conflicting.push({ session: s, fromGroup: g });
+          }
+        }
+      }
+    }
+
+    if (conflicting.length > 0) {
+      const names = conflicting.map(c => `"${c.session.name || c.session.sessionId.substring(0, 12)}" (in ${c.fromGroup})`).join('\n');
+      const move = confirm(
+        `${conflicting.length} session(s) in this folder are already assigned to other groups:\n\n${names}\n\nMove them to "${groupName}"?\n\nOK = Move all to "${groupName}"\nCancel = Skip them (keep their current group)`
+      );
+      if (move) {
+        for (const c of conflicting) {
+          this._removeSessionFromGroupSilent(c.session.sessionId, c.fromGroup);
+        }
+      }
+    }
+
+    this._addFolderToGroup(fp, groupName);
+  }
+
+  _removeSessionFromGroupSilent(sessionId, groupName) {
+    if (!this._sessionGroups[groupName]) return;
+    this._sessionGroups[groupName] = this._sessionGroups[groupName].filter(id => id !== sessionId);
+    if (this._sessionGroups[groupName].length === 0) {
+      delete this._sessionGroups[groupName];
+    }
+    // Don't push state or render yet — caller will do it
   }
 
   _showFolderGroupPopover(anchor, folderPath) {

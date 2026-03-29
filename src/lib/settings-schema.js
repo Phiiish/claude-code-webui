@@ -108,6 +108,22 @@ const SETTINGS_SCHEMA = {
     description: 'Show the Groups tab for user-created session groups with folder linking',
     category: 'Sidebar', liveApply: true,
   },
+  'sidebar.groupHeaderButtons': {
+    type: 'multiSelect', default: ['resumeAll', 'linkedFolders', 'delete'],
+    options: [
+      { value: 'resumeAll', label: '▶ Resume All' },
+      { value: 'linkedFolders', label: '📁 Linked Folders' },
+      { value: 'delete', label: '× Delete' },
+    ],
+    label: 'Group header buttons',
+    description: 'Choose which action buttons to show on group headers',
+    category: 'Sidebar', liveApply: false,
+  },
+  'sidebar.groupRightClickMenu': {
+    type: 'boolean', default: true, label: 'Group right-click menu',
+    description: 'Right-click on group header to show context menu (Add folder, Delete group)',
+    category: 'Sidebar', liveApply: false,
+  },
   'sidebar.enableAutoGrouping': {
     type: 'boolean', default: false, label: 'Auto domain grouping',
     description: 'Automatically group sessions by workspace path or name prefix',
