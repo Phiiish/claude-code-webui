@@ -866,7 +866,8 @@ class Sidebar {
     actionsDiv.appendChild(detailRenameBtn);
 
     // Find button — highlight the window + taskbar item with fast blink
-    if (s.webuiId) {
+    const clickToLocate = settings?.get('sessionCard.clickToLocate') ?? false;
+    if (s.webuiId && !clickToLocate) {
       const findBtn = document.createElement('button');
       findBtn.className = 'session-detail-btn';
       findBtn.textContent = '\uD83D\uDD0D Find';
@@ -875,6 +876,14 @@ class Sidebar {
         this.app.flashWindow(s.webuiId);
       };
       actionsDiv.appendChild(findBtn);
+    }
+    // Collapse button (when clickToLocate is on, since clicking card won't collapse)
+    if (clickToLocate) {
+      const collapseBtn = document.createElement('button');
+      collapseBtn.className = 'session-detail-btn';
+      collapseBtn.textContent = '\u25B2 Collapse';
+      collapseBtn.onclick = (e) => { e.stopPropagation(); this._expandedCardId = null; this._render(); };
+      actionsDiv.appendChild(collapseBtn);
     }
 
     // Resume/Attach action button
@@ -909,7 +918,6 @@ class Sidebar {
 
     const clickToExpand = settings?.get('sessionCard.clickToExpand') ?? false;
     if (clickToExpand) {
-      // Click expands/collapses; use buttons inside detail to open/resume
       if (s.status === 'external') {
         card.style.opacity = '0.7';
         card.title = 'Running in unsupported terminal (PID ' + (s.pid || '?') + ')';
@@ -917,11 +925,18 @@ class Sidebar {
       card.onclick = (e) => {
         if (e.target.closest('.session-detail-btn') || e.target.closest('.session-inline-btn') || e.target.closest('.session-expand-btn') || e.target.closest('.session-detail-copyable')) return;
         if (this._expandedCardId === s.sessionId) {
-          this._expandedCardId = null;
+          if (clickToLocate && s.webuiId) {
+            // Already expanded + clickToLocate: flash the window instead of collapsing
+            this.app.flashWindow(s.webuiId);
+          } else {
+            // Collapse
+            this._expandedCardId = null;
+            this._render();
+          }
         } else {
           this._expandedCardId = s.sessionId;
+          this._render();
         }
-        this._render();
       };
     } else {
       // Default: click opens/resumes directly
