@@ -773,6 +773,59 @@ app.post('/api/session-groups', (req, res) => {
   res.json({ success: true });
 });
 
+// ── Preset Export/Import ──
+// Portable file containing all user customizations.
+// Forward-compatible: unknown sections preserved on export, ignored on import.
+const PRESET_FILE = path.join(__dirname, 'webui-preset.json');
+
+app.get('/api/preset', (req, res) => {
+  const bookmarksFile = path.join(__dirname, 'data', 'bookmarks.json');
+  const layoutsFile = path.join(__dirname, 'data', 'layouts.json');
+  res.json({
+    _format: 'claude-code-webui-preset',
+    _version: 3,
+    _exportedAt: new Date().toISOString(),
+    settings: readSettings(),
+    userState: readUserState(),
+    bookmarks: (() => { try { return JSON.parse(fs.readFileSync(bookmarksFile, 'utf-8')); } catch { return []; } })(),
+    layouts: (() => { try { return JSON.parse(fs.readFileSync(layoutsFile, 'utf-8')); } catch { return {}; } })(),
+  });
+});
+
+app.post('/api/preset/save', (req, res) => {
+  const preset = req.body;
+  if (!preset || typeof preset !== 'object') return res.status(400).json({ error: 'Expected preset object' });
+  try {
+    fs.writeFileSync(PRESET_FILE, JSON.stringify(preset, null, 2));
+    res.json({ success: true, path: PRESET_FILE });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/preset/import', (req, res) => {
+  const preset = req.body;
+  if (!preset || typeof preset !== 'object') return res.status(400).json({ error: 'Expected preset object' });
+  if (!preset._format && !preset._version) return res.status(400).json({ error: 'Not a valid preset file' });
+  try {
+    if (preset.settings && typeof preset.settings === 'object') {
+      writeSettings({ ...readSettings(), ...preset.settings });
+    }
+    if (preset.userState && typeof preset.userState === 'object') {
+      writeUserState(preset.userState);
+    }
+    if (preset.bookmarks && Array.isArray(preset.bookmarks)) {
+      ensureDir(path.join(__dirname, 'data'));
+      fs.writeFileSync(path.join(__dirname, 'data', 'bookmarks.json'), JSON.stringify(preset.bookmarks, null, 2));
+      const msg = JSON.stringify({ type: 'bookmarks-updated', bookmarks: preset.bookmarks });
+      wss.clients.forEach(client => { if (client.readyState === WS_OPEN) { try { client.send(msg); } catch {} } });
+    }
+    if (preset.layouts && typeof preset.layouts === 'object') {
+      ensureDir(path.join(__dirname, 'data'));
+      fs.writeFileSync(path.join(__dirname, 'data', 'layouts.json'), JSON.stringify(preset.layouts, null, 2));
+    }
+    res.json({ success: true, imported: Object.keys(preset).filter(k => !k.startsWith('_')) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Create a new session group
 app.post('/api/session-groups/create', (req, res) => {
   const { name } = req.body;
