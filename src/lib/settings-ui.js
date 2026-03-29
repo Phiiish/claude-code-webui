@@ -63,8 +63,9 @@ class SettingsUI {
         try {
           const text = await file.text();
           const preset = JSON.parse(text);
-          if (!preset._version) { alert('Invalid preset file'); return; }
-          if (!confirm('This will overwrite all current settings, groups, and bookmarks. Continue?')) return;
+          if (!preset._version && !preset._format) { alert('Invalid preset file: missing version info'); return; }
+          const sections = Object.keys(preset).filter(k => !k.startsWith('_'));
+          if (!confirm(`Import preset (${sections.join(', ')})?\n\nThis will overwrite current settings. Continue?`)) return;
           const res = await fetch('/api/preset-import', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(preset),

@@ -746,32 +746,52 @@ app.post('/api/settings', (req, res) => {
   res.json({ success: true });
 });
 
-// Export all user presets (settings + user-state + bookmarks) as a single JSON
+// ── Preset Export/Import ──
+// Bundles all user customizations into a single portable file.
+// Forward-compatible: unknown sections are preserved on export and ignored on import.
+// Settings are sparse (only non-defaults), so importing an older preset into a newer
+// version just means new settings keep their defaults.
 app.get('/api/preset-export', (req, res) => {
+  const bookmarksFile = path.join(__dirname, 'data', 'bookmarks.json');
+  const layoutsFile = path.join(__dirname, 'data', 'layouts.json');
   const preset = {
-    _version: 1,
+    _format: 'claude-code-webui-preset',
+    _version: 2,
     _exportedAt: new Date().toISOString(),
     settings: readSettings(),
     userState: readUserState(),
-    bookmarks: (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'bookmarks.json'), 'utf-8')); } catch { return []; } })(),
+    bookmarks: (() => { try { return JSON.parse(fs.readFileSync(bookmarksFile, 'utf-8')); } catch { return []; } })(),
+    layouts: (() => { try { return JSON.parse(fs.readFileSync(layoutsFile, 'utf-8')); } catch { return {}; } })(),
   };
   res.json(preset);
 });
 
-// Import presets: overwrite settings + user-state + bookmarks
 app.post('/api/preset-import', (req, res) => {
   const preset = req.body;
   if (!preset || typeof preset !== 'object') return res.status(400).json({ error: 'Expected preset object' });
+  if (!preset._format && !preset._version) return res.status(400).json({ error: 'Not a valid preset file' });
   try {
-    if (preset.settings && typeof preset.settings === 'object') writeSettings(preset.settings);
-    if (preset.userState && typeof preset.userState === 'object') writeUserState(preset.userState);
+    // Each section is optional — only overwrite what's present in the file.
+    // Unknown sections from future versions are silently ignored.
+    if (preset.settings && typeof preset.settings === 'object') {
+      // Merge: imported settings override, but don't remove settings not in the file
+      const current = readSettings();
+      writeSettings({ ...current, ...preset.settings });
+    }
+    if (preset.userState && typeof preset.userState === 'object') {
+      writeUserState(preset.userState);
+    }
     if (preset.bookmarks && Array.isArray(preset.bookmarks)) {
       ensureDir(path.join(__dirname, 'data'));
       fs.writeFileSync(path.join(__dirname, 'data', 'bookmarks.json'), JSON.stringify(preset.bookmarks, null, 2));
       const msg = JSON.stringify({ type: 'bookmarks-updated', bookmarks: preset.bookmarks });
       wss.clients.forEach(client => { if (client.readyState === WS_OPEN) { try { client.send(msg); } catch {} } });
     }
-    res.json({ success: true });
+    if (preset.layouts && typeof preset.layouts === 'object') {
+      ensureDir(path.join(__dirname, 'data'));
+      fs.writeFileSync(path.join(__dirname, 'data', 'layouts.json'), JSON.stringify(preset.layouts, null, 2));
+    }
+    res.json({ success: true, imported: Object.keys(preset).filter(k => !k.startsWith('_')) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
