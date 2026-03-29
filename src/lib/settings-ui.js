@@ -33,6 +33,51 @@ class SettingsUI {
     title.textContent = 'Settings';
     const headerRight = document.createElement('div');
     headerRight.className = 'settings-header-actions';
+    // Export preset
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'settings-header-btn';
+    exportBtn.textContent = 'Export';
+    exportBtn.title = 'Export all presets (settings, groups, bookmarks) to a file';
+    exportBtn.onclick = async () => {
+      try {
+        const res = await fetch('/api/preset-export');
+        const preset = await res.json();
+        const blob = new Blob([JSON.stringify(preset, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'webui-preset.json'; a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) { alert('Export failed: ' + err.message); }
+    };
+
+    // Import preset
+    const importBtn = document.createElement('button');
+    importBtn.className = 'settings-header-btn';
+    importBtn.textContent = 'Import';
+    importBtn.title = 'Import presets from a file (overwrites current settings)';
+    importBtn.onclick = () => {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = '.json';
+      input.onchange = async () => {
+        const file = input.files[0]; if (!file) return;
+        try {
+          const text = await file.text();
+          const preset = JSON.parse(text);
+          if (!preset._version) { alert('Invalid preset file'); return; }
+          if (!confirm('This will overwrite all current settings, groups, and bookmarks. Continue?')) return;
+          const res = await fetch('/api/preset-import', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(preset),
+          });
+          if (res.ok) {
+            alert('Presets imported. Reloading page...');
+            location.reload();
+          } else { alert('Import failed'); }
+        } catch (err) { alert('Import failed: ' + err.message); }
+      };
+      input.click();
+    };
+
     const resetAllBtn = document.createElement('button');
     resetAllBtn.className = 'settings-header-btn';
     resetAllBtn.textContent = 'Reset All';
@@ -42,7 +87,7 @@ class SettingsUI {
     closeBtn.className = 'dialog-close';
     closeBtn.textContent = '✕';
     closeBtn.onclick = () => overlay.remove();
-    headerRight.append(resetAllBtn, closeBtn);
+    headerRight.append(exportBtn, importBtn, resetAllBtn, closeBtn);
     header.append(title, headerRight);
 
     // Search

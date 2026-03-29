@@ -746,6 +746,35 @@ app.post('/api/settings', (req, res) => {
   res.json({ success: true });
 });
 
+// Export all user presets (settings + user-state + bookmarks) as a single JSON
+app.get('/api/preset-export', (req, res) => {
+  const preset = {
+    _version: 1,
+    _exportedAt: new Date().toISOString(),
+    settings: readSettings(),
+    userState: readUserState(),
+    bookmarks: (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'bookmarks.json'), 'utf-8')); } catch { return []; } })(),
+  };
+  res.json(preset);
+});
+
+// Import presets: overwrite settings + user-state + bookmarks
+app.post('/api/preset-import', (req, res) => {
+  const preset = req.body;
+  if (!preset || typeof preset !== 'object') return res.status(400).json({ error: 'Expected preset object' });
+  try {
+    if (preset.settings && typeof preset.settings === 'object') writeSettings(preset.settings);
+    if (preset.userState && typeof preset.userState === 'object') writeUserState(preset.userState);
+    if (preset.bookmarks && Array.isArray(preset.bookmarks)) {
+      ensureDir(path.join(__dirname, 'data'));
+      fs.writeFileSync(path.join(__dirname, 'data', 'bookmarks.json'), JSON.stringify(preset.bookmarks, null, 2));
+      const msg = JSON.stringify({ type: 'bookmarks-updated', bookmarks: preset.bookmarks });
+      wss.clients.forEach(client => { if (client.readyState === WS_OPEN) { try { client.send(msg); } catch {} } });
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.patch('/api/settings', (req, res) => {
   const current = readSettings();
   const patch = req.body;
