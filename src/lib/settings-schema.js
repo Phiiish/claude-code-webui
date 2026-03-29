@@ -98,6 +98,16 @@ const SETTINGS_SCHEMA = {
     description: 'Which session statuses to show by default',
     category: 'Sidebar', liveApply: false,
   },
+  'sidebar.showFoldersView': {
+    type: 'boolean', default: true, label: 'Show Folders view',
+    description: 'Show the Folders tab that groups sessions by working directory',
+    category: 'Sidebar', liveApply: true,
+  },
+  'sidebar.showGroupsView': {
+    type: 'boolean', default: true, label: 'Show Groups view',
+    description: 'Show the Groups tab for user-created session groups with folder linking',
+    category: 'Sidebar', liveApply: true,
+  },
   'sidebar.enableAutoGrouping': {
     type: 'boolean', default: false, label: 'Auto domain grouping',
     description: 'Automatically group sessions by workspace path or name prefix',

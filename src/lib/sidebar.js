@@ -50,8 +50,11 @@ class Sidebar {
     document.getElementById('sidebar-close').onclick = () => this.toggle(false);
     document.getElementById('session-filter').oninput = () => this._render();
 
-    // Build tab bar
+    // Build tab bar (respects settings)
     this._buildTabBar();
+    const rebuildTabs = () => { this._buildTabBar(); this._render(); };
+    this.app.settings?.on('sidebar.showFoldersView', rebuildTabs);
+    this.app.settings?.on('sidebar.showGroupsView', rebuildTabs);
 
     // Sort toggle
     const sortBtn = document.getElementById('sort-toggle');
@@ -69,6 +72,13 @@ class Sidebar {
     this._activeView = null; // null = ALL (show all selected filters), or a specific status string
     const filterBtn = document.getElementById('live-filter');
     filterBtn.onclick = (e) => { e.stopPropagation(); this._showStatusFilterMenu(filterBtn); };
+    // Re-apply when settings finish loading or change
+    this.app.settings?.on('sidebar.defaultStatusFilter', (val) => {
+      this._statusFilter = new Set(val);
+      this._activeView = null;
+      this._updateFilterBtn(filterBtn);
+      this._render();
+    });
     this._renderQuickTabs();
     // Re-render quick tabs after settings finish loading (async)
     this.app.settings?.on('sidebar.enableStatusQuickTabs', () => this._renderQuickTabs());
@@ -147,24 +157,34 @@ class Sidebar {
   // ── Tab Bar ──
 
   _buildTabBar() {
-    const section = this.listEl.parentElement; // the sidebar-section div containing the list
+    const section = this.listEl.parentElement;
+    this.el.querySelector('.sidebar-tabs')?.remove(); // remove existing if rebuilding
+
+    const showFolders = this.app.settings?.get('sidebar.showFoldersView') ?? true;
+    const showGroups = this.app.settings?.get('sidebar.showGroupsView') ?? true;
+
+    // Single view: no tab bar needed
+    if (!showFolders && !showGroups) { this._activeTab = 'folders'; return; }
+    if (showFolders && !showGroups) { this._activeTab = 'folders'; return; }
+    if (!showFolders && showGroups) { this._activeTab = 'groups'; return; }
+
+    // Both enabled: show tab bar
     const tabBar = document.createElement('div');
     tabBar.className = 'sidebar-tabs';
 
     const foldersTab = document.createElement('button');
-    foldersTab.className = 'sidebar-tab active';
+    foldersTab.className = 'sidebar-tab' + (this._activeTab === 'folders' ? ' active' : '');
     foldersTab.textContent = 'Folders';
     foldersTab.dataset.tab = 'folders';
     foldersTab.onclick = () => { this._activeTab = 'folders'; this._updateTabs(); this._render(); };
 
     const groupsTab = document.createElement('button');
-    groupsTab.className = 'sidebar-tab';
+    groupsTab.className = 'sidebar-tab' + (this._activeTab === 'groups' ? ' active' : '');
     groupsTab.textContent = 'Groups';
     groupsTab.dataset.tab = 'groups';
     groupsTab.onclick = () => { this._activeTab = 'groups'; this._updateTabs(); this._render(); };
 
     tabBar.append(foldersTab, groupsTab);
-    // Insert tab bar before the filter row (first child of section)
     section.insertBefore(tabBar, section.firstChild);
   }
 
