@@ -37,13 +37,16 @@ class SettingsUI {
     const exportBtn = document.createElement('button');
     exportBtn.className = 'settings-header-btn'; exportBtn.textContent = 'Export';
     exportBtn.title = 'Export all presets to webui-preset.json';
+    // Allowlist of localStorage keys to include in presets
+    const CLIENT_STATE_KEYS = ['fileExplorerSettings', 'fileExplorerColumns', 'termFontSize', 'termFontFamily', 'theme', 'sidebarWidth'];
+
     exportBtn.onclick = async () => {
       try {
-        const res = await fetch('/api/preset'); const preset = await res.json();
-        // Collect client-side localStorage data
-        const clientKeys = ['fileExplorerSettings', 'fileExplorerColumns', 'termFontSize', 'termFontFamily', 'theme', 'sidebarWidth'];
+        const res = await fetch('/api/preset');
+        if (!res.ok) { alert('Export failed: server returned ' + res.status); return; }
+        const preset = await res.json();
         const clientState = {};
-        for (const k of clientKeys) { const v = localStorage.getItem(k); if (v !== null) clientState[k] = v; }
+        for (const k of CLIENT_STATE_KEYS) { const v = localStorage.getItem(k); if (v !== null) clientState[k] = v; }
         preset.clientState = clientState;
         const saveRes = await fetch('/api/preset/save', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(preset),
@@ -71,8 +74,11 @@ class SettingsUI {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(preset),
           });
           if (res.ok) {
+            // Issue 4: only restore allowlisted localStorage keys
             if (preset.clientState && typeof preset.clientState === 'object') {
-              for (const [k, v] of Object.entries(preset.clientState)) localStorage.setItem(k, v);
+              for (const [k, v] of Object.entries(preset.clientState)) {
+                if (CLIENT_STATE_KEYS.includes(k)) localStorage.setItem(k, v);
+              }
             }
             alert('Imported. Reloading...'); location.reload();
           } else alert('Import failed');

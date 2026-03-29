@@ -795,8 +795,12 @@ app.get('/api/preset', (req, res) => {
 app.post('/api/preset/save', (req, res) => {
   const preset = req.body;
   if (!preset || typeof preset !== 'object') return res.status(400).json({ error: 'Expected preset object' });
+  // Validate format (Issue 1: prevent arbitrary writes)
+  if (preset._format !== 'claude-code-webui-preset') return res.status(400).json({ error: 'Invalid preset format' });
+  const json = JSON.stringify(preset, null, 2);
+  if (json.length > 10 * 1024 * 1024) return res.status(400).json({ error: 'Preset too large (max 10MB)' });
   try {
-    fs.writeFileSync(PRESET_FILE, JSON.stringify(preset, null, 2));
+    fs.writeFileSync(PRESET_FILE, json);
     res.json({ success: true, path: PRESET_FILE });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -804,13 +808,24 @@ app.post('/api/preset/save', (req, res) => {
 app.post('/api/preset/import', (req, res) => {
   const preset = req.body;
   if (!preset || typeof preset !== 'object') return res.status(400).json({ error: 'Expected preset object' });
+  // Issue 2: stricter validation — require _format when present, fall back to _version for old presets
+  if (preset._format && preset._format !== 'claude-code-webui-preset') return res.status(400).json({ error: 'Unknown preset format' });
   if (!preset._format && !preset._version) return res.status(400).json({ error: 'Not a valid preset file' });
   try {
     if (preset.settings && typeof preset.settings === 'object') {
       writeSettings({ ...readSettings(), ...preset.settings });
     }
+    // Issue 3: merge userState instead of overwriting — preserve current data, overlay imported
     if (preset.userState && typeof preset.userState === 'object') {
-      writeUserState(preset.userState);
+      const current = readUserState();
+      const merged = { ...current };
+      // Merge arrays by union (starred, archived) and objects by overlay (customNames, groups, folders)
+      if (Array.isArray(preset.userState.starredSessions)) merged.starredSessions = [...new Set([...(current.starredSessions || []), ...preset.userState.starredSessions])];
+      if (Array.isArray(preset.userState.archivedSessions)) merged.archivedSessions = [...new Set([...(current.archivedSessions || []), ...preset.userState.archivedSessions])];
+      if (preset.userState.customNames) merged.customNames = { ...(current.customNames || {}), ...preset.userState.customNames };
+      if (preset.userState.sessionGroups) merged.sessionGroups = { ...(current.sessionGroups || {}), ...preset.userState.sessionGroups };
+      if (preset.userState.groupFolders) merged.groupFolders = { ...(current.groupFolders || {}), ...preset.userState.groupFolders };
+      writeUserState(merged);
     }
     if (preset.bookmarks && Array.isArray(preset.bookmarks)) {
       ensureDir(path.join(__dirname, 'data'));
