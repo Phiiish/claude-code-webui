@@ -1109,6 +1109,10 @@ class App {
   }
 
   _notifySidebarFocus() {
+    if (!(this.settings.get('window.linkedFocus') ?? false)) {
+      this.sidebar.highlightSession(null);
+      return;
+    }
     // Find the claude session ID for the currently focused terminal window
     const activeWinId = this.wm.activeWindowId;
     const term = this.sessions.get(activeWinId);

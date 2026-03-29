@@ -49,6 +49,22 @@ const SETTINGS_SCHEMA = {
     description: 'Show overlap icon on title bar when windows stack',
     category: 'Window', liveApply: true,
   },
+  'window.linkedFocus': {
+    type: 'boolean', default: false, label: 'Linked focus highlighting',
+    description: 'Clicking a session in sidebar, window, or taskbar highlights all three in sync',
+    category: 'Window', liveApply: true,
+  },
+  'window.activeHighlightIntensity': {
+    type: 'enum', default: 'normal',
+    options: [
+      { value: 'subtle', label: 'Subtle' },
+      { value: 'normal', label: 'Normal' },
+      { value: 'strong', label: 'Strong' },
+    ],
+    label: 'Active window highlight',
+    description: 'How prominently the focused window is highlighted',
+    category: 'Window', liveApply: true,
+  },
 
   // ── Terminal ──
   'terminal.minimumContrastRatio': {
