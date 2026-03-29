@@ -125,6 +125,11 @@ const SETTINGS_SCHEMA = {
     description: 'Single-click expands session card details instead of opening/resuming the session',
     category: 'Session Card', liveApply: false,
   },
+  'sessionCard.clickToLocate': {
+    type: 'boolean', default: false, label: 'Click expanded card to locate window',
+    description: 'When expanded, clicking the card header bounces/flashes the window instead of collapsing. Replaces the Find button.',
+    category: 'Session Card', liveApply: false,
+  },
   'sessionCard.clickToCopy': {
     type: 'boolean', default: false, label: 'Click detail values to copy',
     description: 'Click on ID, Path, Time, or Groups values to copy them to clipboard',
